@@ -1,5 +1,5 @@
 # 2020_ECE276A_PR3
- Visual-Inertial SLAM performed with a visual-keypoint and IMU dataset. For ECE 276A at UCSD. 
+ Visual-Inertial SLAM performed with a visual-keypoint and IMU dataset. For ECE 276A at UCSD. Consult the project report in the code folder for more background. 
  
  We observe that, in all of the three datasets provided, the EKF performs well at visual-inertial SLAM (provided the guesses of the covariances belonging to the inherent Gaussian movement noise and measurement noise are good). By comparing each raw path (in red) to its corresponding filtered path (in blue), we can see that the localization of the vehicle benefits tremendously from localizing based on visual keypoint tracking. If the Kalman filter is black magic, the EKF is advanced black magic.
  
