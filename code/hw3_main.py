@@ -46,12 +46,12 @@ if __name__ == '__main__':
             continue
         
         tau = np.abs(t[0, i] - t[0, i - 1])
-        
+
     	# (a) IMU Localization via EKF Prediction
         EKF_inertial_prediction(Car, linear_velocity[:, i], rotational_velocity[:, i], tau, 0.00001, 0.0001)
         EKF_visual_inertial_prediction(Car, linear_velocity[:, i], rotational_velocity[:, i], tau, 0.00001, 0.0001)
 
-        # record current poses
+        # record current poses (landmark trajectory for debugging)
         Car['trajectory'][:, :, i] = world_T_imu(Car['mean']) # inv(inv pose)
         Landmarks['trajectory'][:, :, i - 1] = Landmarks['mean'][:]
 

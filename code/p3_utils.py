@@ -37,12 +37,12 @@ def load_data(file_name):
       features = data["features"] # 4 x num_features : pixel coordinates of features
       linear_velocity = data["linear_velocity"] # linear velocity measured in the body frame
       rotational_velocity = data["rotational_velocity"] # rotational velocity measured in the body frame
-      K = data["K"] # intrindic calibration matrix
+      K = data["K"] # intrinsic calibration matrix
       b = data["b"] # baseline
       cam_T_imu = data["cam_T_imu"] # Transformation from imu to camera frame
   return t, features, linear_velocity, rotational_velocity, K, b, cam_T_imu
 
-def visualize_trajectory_2d(pose, landmarks, better_pose, better_landmarks, timestamp, path_name="Unknown", show_ori=False, show_grid=False):
+def visualize_trajectory_2d(pose, landmarks, better_pose, better_landmarks, timestamp, path_name="Unknown", show_ori=False, show_grid=False, savefig=False):
   '''
   function to visualize the trajectory in 2D
   Input:
@@ -50,32 +50,33 @@ def visualize_trajectory_2d(pose, landmarks, better_pose, better_landmarks, time
               where N is the number of pose, and each
               4*4 matrix is in SE(3)
   '''
-  fig,ax = plt.subplots(figsize=(5,5))
+  fig,ax = plt.subplots(figsize=(5, 5))
   n_pose = pose.shape[2]
-  ax.plot(landmarks[0,:],landmarks[1,:],'g.',markersize=1.5,label='landmarks')
-  ax.plot(better_landmarks[0,:],better_landmarks[1,:],'c.',markersize=1.5,label='landmarks_VI')
-  ax.plot(pose[0,3,:],pose[1,3,:],'r-',markersize=6,label=path_name)
-  ax.plot(better_pose[0,3,:],better_pose[1,3,:],'b-',markersize=6,label=path_name + "_VI")
-  ax.scatter(pose[0,3,0],pose[1,3,0],marker='s',label="start")
-  ax.scatter(pose[0,3,-1],pose[1,3,-1],marker='o',label="end")
+  ax.plot(landmarks[0, :], landmarks[1, :], 'g.', markersize=1.5, label='landmarks')
+  ax.plot(better_landmarks[0, :], better_landmarks[1, :], 'c.', markersize=1.5, label='landmarks_VI')
+  ax.plot(pose[0, 3, :], pose[1, 3, :], 'r-', markersize=6, label=path_name)
+  ax.plot(better_pose[0, 3, :], better_pose[1, 3, :], 'b-', markersize=6, label=path_name + "_VI")
+  ax.scatter(pose[0, 3, 0], pose[1, 3, 0], marker='s', label="start")
+  ax.scatter(pose[0, 3, -1], pose[1, 3, -1], marker='o', label="end")
   if show_ori:
-      select_ori_index = list(range(0,n_pose,max(int(n_pose/50), 1)))
+      select_ori_index = list(range(0, n_pose, max(int(n_pose / 50), 1)))
       yaw_list = []
       for i in select_ori_index:
-          _,_,yaw = mat2euler(pose[:3,:3,i])
+          _, _, yaw = mat2euler(pose[:3, :3, i])
           yaw_list.append(yaw)
       dx = np.cos(yaw_list)
       dy = np.sin(yaw_list)
-      dx,dy = [dx,dy]/np.sqrt(dx**2+dy**2)
-      ax.quiver(pose[0,3,select_ori_index],pose[1,3,select_ori_index],dx,dy,\
-          color="b",units="xy",width=1)
+      dx,dy = [dx, dy] / np.sqrt(dx**2 + dy**2)
+      ax.quiver(pose[0, 3, select_ori_index], pose[1, 3, select_ori_index], dx, dy,\
+          color="b", units="xy", width=1)
   ax.set_xlabel('x')
   ax.set_ylabel('y')
   ax.set_title('timestamp ' + timestamp)
   ax.axis('equal')
   ax.grid(show_grid)
   ax.legend()
-  fig.savefig("d" + path_name + "t" + timestamp, dpi = 300)
+  if savefig:
+    fig.savefig("d" + path_name + "t" + timestamp, dpi = 300)
   plt.show(block=True)
   return fig, ax
 
@@ -83,7 +84,7 @@ def visualize_trajectory_2d(pose, landmarks, better_pose, better_landmarks, time
 def hat_map_3(x):
     hat_map = np.array([[   0,  -x[2],  x[1]],
                         [x[2],      0, -x[0]], 
-                        [-x[1],  x[0],    0]])
+                        [-x[1],  x[0],     0]])
     return hat_map
 
 def hat_map_6(u):
@@ -122,7 +123,7 @@ def world_T_imu(mean_pose):
     
     return U_inv
 
-def EKF_inertial_prediction(Car, v, omega, tau, weight_v, weight_omega):
+def EKF_inertial_prediction(Car, v, omega, tau, weight_v = 0.00001, weight_omega = 0.0001):
     # covariance for movement noise
     W = np.block([[weight_v * np.eye(3),          np.zeros((3,3))],
                   [    np.zeros((3, 3)), weight_omega * np.eye(3)]])
@@ -136,7 +137,7 @@ def EKF_inertial_prediction(Car, v, omega, tau, weight_v, weight_omega):
     Car['mean'] = expm(tau * u_hat) @ Car['mean']
     Car['covariance'] = expm(tau * u_curlyhat) @ Car['covariance'] @ np.transpose(expm(tau * u_curlyhat)) + W
     
-def EKF_visual_update(Car, Landmarks, curr_features, K, b, cam_T_imu, weight = 1000):
+def EKF_visual_update(Car, Landmarks, curr_features, K, b, cam_T_imu, weight = 3500):
     # covariance for measurement noise
     V = weight * np.eye(4)
     
@@ -181,25 +182,22 @@ def EKF_visual_update(Car, Landmarks, curr_features, K, b, cam_T_imu, weight = 1
         Landmarks['mean'][:, i] = Landmarks['mean'][:, i] + P.T @ KG @ (z - z_tilde)
         Landmarks['covariance'][:, :, i] = (np.eye(3) - KG @ H) @ Landmarks['covariance'][:, :, i]
         
-def EKF_visual_inertial_prediction(Car, v, omega, tau, weight_v, weight_omega):
-    # movement noise
-#    noise = np.block([[np.random.normal(0, weight_omega, (3, 3)), np.random.normal(0, weight_v, (3, 1))],
-#                      [np.zeros((1, 4))]])
-    
+def EKF_visual_inertial_prediction(Car, v, omega, tau, weight_v = 0.00001, weight_omega = 0.0001):
     # covariance for movement noise
     W = np.block([[weight_v * np.eye(3), np.zeros((3,3))],
                   [    np.zeros((3, 3)), weight_omega * np.eye(3)]])
     
     tau = -(tau)
     
-    u_hat = np.vstack((np.hstack((hat_map_3(omega), v.reshape(3, 1))), np.zeros((1, 4))))    
+    u_hat = np.vstack((np.hstack((hat_map_3(omega), v.reshape(3, 1))), np.zeros((1, 4))))
+    
     u_curlyhat = np.block([[hat_map_3(omega),     hat_map_3(v)], 
                            [np.zeros((3, 3)), hat_map_3(omega)]])
     
-    Car['mean_vi'] = expm(tau * u_hat) @ Car['mean_vi'] # + noise
+    Car['mean_vi'] = expm(tau * u_hat) @ Car['mean_vi']
     Car['covariance_vi'] = expm(tau * u_curlyhat) @ Car['covariance_vi'] @ np.transpose(expm(tau * u_curlyhat)) + W
 
-def EKF_visual_inertial_update(Car, Landmarks, curr_features, K, b, cam_T_imu, weight):
+def EKF_visual_inertial_update(Car, Landmarks, curr_features, K, b, cam_T_imu, weight = 3500):
     # covariance for measurement noise
     V = weight * np.eye(4)
     P = np.eye(3, 4)
@@ -226,7 +224,7 @@ def EKF_visual_inertial_update(Car, Landmarks, curr_features, K, b, cam_T_imu, w
             
             Landmarks['mean_vi'][:, i] = world_T_cam @ camera_frame_coords
     
-            continue 
+            continue
         
         # else if landmark is present in the current timestamp, and has been seen before
         # create predicted z_tilde from previous z (in camera-frame coordinates)
